@@ -257,6 +257,31 @@ def read_pdf_file(pdf_path):
             'error': f"Error reading file: {str(e)}"
         }
 
+def extract_text_from_pdf(pdf_path: str) -> str:
+    """
+    Extract text from a PDF file.
+    
+    Args:
+        pdf_path (str): Path to the PDF file
+        
+    Returns:
+        str: Extracted text from the PDF
+    """
+    try:
+        with open(pdf_path, 'rb') as file:
+            # Create PDF reader object
+            pdf_reader = PyPDF2.PdfReader(file)
+            
+            # Extract text from all pages
+            text = ""
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+            
+            return text
+    except Exception as e:
+        print(f"Error extracting text from {pdf_path}: {str(e)}")
+        return ""
+
 def process_pdf_directory(directory_path: str, protocol_path: str = None) -> List[Dict[str, Any]]:
     """
     Process all PDF files in a directory and return extracted data.
@@ -271,29 +296,81 @@ def process_pdf_directory(directory_path: str, protocol_path: str = None) -> Lis
     results = []
     pdf_files = list(Path(directory_path).glob("*.pdf"))
     
+    print(f"Found {len(pdf_files)} PDF files to process")
+    
     for pdf_file in pdf_files:
         try:
             # Skip protocol file if it's in the same directory
             if protocol_path and str(pdf_file) == protocol_path:
                 continue
                 
+            print(f"Processing: {pdf_file.name}")
             # Extract text from PDF
             text = extract_text_from_pdf(str(pdf_file))
             
-            # Create result dictionary
-            result = {
-                'filename': pdf_file.name,
-                'text': text,
-                'processed_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-            
-            results.append(result)
+            if text:
+                # Create result dictionary
+                result = {
+                    'filename': pdf_file.name,
+                    'text': text,
+                    'processed_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                }
+                
+                results.append(result)
+                print(f"Successfully processed: {pdf_file.name}")
+            else:
+                print(f"No text extracted from: {pdf_file.name}")
             
         except Exception as e:
             print(f"Error processing {pdf_file.name}: {str(e)}")
             continue
     
+    print(f"Successfully processed {len(results)} out of {len(pdf_files)} files")
     return results
+
+# Basic math operations
+def add(a, b):
+    return a + b
+
+def subtract(a, b):
+    return a - b
+
+def multiply(a, b):
+    return a * b
+
+def divide(a, b):
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+# Advanced math operations
+def power(a, b):
+    return a ** b
+
+def square_root(a):
+    if a < 0:
+        raise ValueError("Cannot calculate square root of negative number")
+    return a ** 0.5
+
+def factorial(n):
+    if not isinstance(n, int) or n < 0:
+        raise ValueError("Factorial is only defined for non-negative integers")
+    if n == 0:
+        return 1
+    return n * factorial(n - 1)
+
+# Trigonometric functions
+def sine(angle):
+    import math
+    return math.sin(angle)
+
+def cosine(angle):
+    import math
+    return math.cos(angle)
+
+def tangent(angle):
+    import math
+    return math.tan(angle)
 
 if __name__ == "__main__":
     pdf_directory = "/Users/gustavopadovezi/Desktop/pdfs"
