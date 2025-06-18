@@ -64,52 +64,55 @@ def main():
                 st.error("Please configure your API key in the sidebar first")
             else:
                 with st.spinner("Processing PDFs..."):
-                    # Process PDFs
-                    results = process_pdf_directory(str(temp_dir))
-                    
-                    if results:
-                        # Convert results to DataFrame
-                        df = pd.DataFrame(results)
+                    try:
+                        # Process PDFs without protocol
+                        results = process_pdf_directory(str(temp_dir))
                         
-                        # Process with AI
-                        st.subheader("AI Analysis")
-                        with st.spinner("Analyzing with AI..."):
-                            # Process each PDF with AI
-                            ai_results = []
-                            for _, row in df.iterrows():
-                                text = row['text'] if 'text' in row else ""
-                                if text:
-                                    ai_data = st.session_state.ai_processor.process_text(text)
-                                    ai_results.append(ai_data)
+                        if results:
+                            # Convert results to DataFrame
+                            df = pd.DataFrame(results)
                             
-                            # Analyze findings across all papers
-                            if ai_results:
-                                analysis = st.session_state.ai_processor.analyze_findings(ai_results)
+                            # Process with AI
+                            st.subheader("AI Analysis")
+                            with st.spinner("Analyzing with AI..."):
+                                # Process each PDF with AI
+                                ai_results = []
+                                for _, row in df.iterrows():
+                                    text = row['text'] if 'text' in row else ""
+                                    if text:
+                                        ai_data = st.session_state.ai_processor.process_text(text)
+                                        ai_results.append(ai_data)
                                 
-                                # Display analysis
-                                st.markdown("### Research Analysis")
-                                st.write(analysis['analysis'])
-                                
-                                # Create AI-enhanced DataFrame
-                                ai_df = pd.DataFrame(ai_results)
-                                
-                                # Save both DataFrames
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                excel_path = Path(output_dir) / f"pdf_extracts_ai_{timestamp}.xlsx"
-                                
-                                with pd.ExcelWriter(excel_path) as writer:
-                                    df.to_excel(writer, sheet_name='Raw Data', index=False)
-                                    ai_df.to_excel(writer, sheet_name='AI Analysis', index=False)
-                                
-                                st.success(f"Files processed successfully! Saved to: {excel_path}")
-                                
-                                # Display preview of AI analysis
-                                st.subheader("Preview of AI Analysis")
-                                st.dataframe(ai_df)
-                            else:
-                                st.error("No text content found in PDFs for AI analysis")
-                    else:
-                        st.error("No results found from PDF processing")
+                                # Analyze findings across all papers
+                                if ai_results:
+                                    analysis = st.session_state.ai_processor.analyze_findings(ai_results)
+                                    
+                                    # Display analysis
+                                    st.markdown("### Research Analysis")
+                                    st.write(analysis['analysis'])
+                                    
+                                    # Create AI-enhanced DataFrame
+                                    ai_df = pd.DataFrame(ai_results)
+                                    
+                                    # Save both DataFrames
+                                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                    excel_path = Path(output_dir) / f"pdf_extracts_ai_{timestamp}.xlsx"
+                                    
+                                    with pd.ExcelWriter(excel_path) as writer:
+                                        df.to_excel(writer, sheet_name='Raw Data', index=False)
+                                        ai_df.to_excel(writer, sheet_name='AI Analysis', index=False)
+                                    
+                                    st.success(f"Files processed successfully! Saved to: {excel_path}")
+                                    
+                                    # Display preview of AI analysis
+                                    st.subheader("Preview of AI Analysis")
+                                    st.dataframe(ai_df)
+                                else:
+                                    st.error("No text content found in PDFs for AI analysis")
+                        else:
+                            st.error("No results found from PDF processing")
+                    except Exception as e:
+                        st.error(f"Error processing PDFs: {str(e)}")
                 
                 # Clean up temporary files
                 for file in temp_dir.glob("*.pdf"):

@@ -5,6 +5,7 @@ import PyPDF2
 import pandas as pd
 from datetime import datetime
 import re
+from typing import List, Dict, Any
 
 # Basic math operations
 print(f"Pi: {math.pi}")
@@ -256,46 +257,43 @@ def read_pdf_file(pdf_path):
             'error': f"Error reading file: {str(e)}"
         }
 
-def process_pdf_directory(directory_path, protocol_path):
-    """Process all PDF files in a directory and save results to Excel."""
-    try:
-        # Read protocol
-        protocol_text = read_protocol(protocol_path)
-        
-        # Get list of PDF files
-        pdf_files = list(Path(directory_path).glob("*.pdf"))
-        print(f"Found {len(pdf_files)} PDF files. Processing...")
-        
-        # List to store all study information
-        all_studies = []
-        
-        # Process each PDF file
-        for pdf_file in pdf_files:
-            print(f"Processing: {pdf_file.name}")
-            study_info = read_pdf_file(pdf_file)
-            if study_info:
-                all_studies.append(study_info)
-        
-        # Convert to DataFrame
-        if all_studies:
-            df = pd.DataFrame(all_studies)
+def process_pdf_directory(directory_path: str, protocol_path: str = None) -> List[Dict[str, Any]]:
+    """
+    Process all PDF files in a directory and return extracted data.
+    
+    Args:
+        directory_path (str): Path to the directory containing PDF files
+        protocol_path (str, optional): Path to the protocol file. If None, will use default extraction.
+    
+    Returns:
+        List[Dict[str, Any]]: List of dictionaries containing extracted data
+    """
+    results = []
+    pdf_files = list(Path(directory_path).glob("*.pdf"))
+    
+    for pdf_file in pdf_files:
+        try:
+            # Skip protocol file if it's in the same directory
+            if protocol_path and str(pdf_file) == protocol_path:
+                continue
+                
+            # Extract text from PDF
+            text = extract_text_from_pdf(str(pdf_file))
             
-            # Generate output filename with timestamp
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_dir = str(Path.home() / "Downloads")
-            output_file = os.path.join(output_dir, f"systematic_review_extracts_{timestamp}.xlsx")
+            # Create result dictionary
+            result = {
+                'filename': pdf_file.name,
+                'text': text,
+                'processed_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
             
-            # Save to Excel
-            df.to_excel(output_file, index=False)
-            print(f"Results saved to: {output_file}")
-            return output_file
-        else:
-            print("No studies were processed successfully.")
-            return None
+            results.append(result)
             
-    except Exception as e:
-        print(f"Error processing directory: {str(e)}")
-        return None
+        except Exception as e:
+            print(f"Error processing {pdf_file.name}: {str(e)}")
+            continue
+    
+    return results
 
 if __name__ == "__main__":
     pdf_directory = "/Users/gustavopadovezi/Desktop/pdfs"
