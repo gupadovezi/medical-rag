@@ -4,109 +4,121 @@ from pathlib import Path
 import pandas as pd
 from datetime import datetime
 from math_example import process_pdf_directory
-import time
+from ai_processor import AIProcessor
 
 st.set_page_config(
-    page_title="Systematic Review PDF Extractor",
+    page_title="AI-Powered PDF Extractor",
     page_icon="📚",
     layout="wide"
 )
 
+# Initialize session state
+if 'ai_processor' not in st.session_state:
+    st.session_state.ai_processor = AIProcessor()
+
 def main():
-    st.title("📚 Systematic Review PDF Extractor")
+    st.title("📚 AI-Powered PDF Extractor")
     st.markdown("""
-    This application helps you extract information from PDF files for systematic reviews.
-    Upload your PDF files and protocol, and the app will process them and generate an Excel file with the extracted information.
+    This application helps you extract and analyze information from PDF files using AI.
+    Upload your PDFs and let the AI process them to extract key information and insights.
     """)
 
-    # Create two columns for file uploads
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("PDF Files")
-        pdf_files = st.file_uploader(
-            "Upload your PDF files",
-            type=['pdf'],
-            accept_multiple_files=True
-        )
-
-    with col2:
-        st.subheader("Protocol File")
-        protocol_file = st.file_uploader(
-            "Upload your protocol file",
-            type=['pdf'],
-            accept_multiple_files=False
-        )
+    # File uploader
+    uploaded_files = st.file_uploader("Upload PDF files", type=['pdf'], accept_multiple_files=True)
 
     # Output directory selection
-    st.subheader("Output Settings")
     output_dir = st.text_input(
         "Output Directory",
         value=str(Path.home() / "Downloads"),
-        help="Where to save the Excel file"
+        help="Directory where the Excel file will be saved"
     )
 
-    # Process button
-    if st.button("Start Extraction", type="primary"):
-        if not pdf_files:
-            st.error("Please upload at least one PDF file")
-            return
-        
-        if not protocol_file:
-            st.error("Please upload a protocol file")
-            return
-
+    if uploaded_files:
         # Create a temporary directory for uploaded files
         temp_dir = Path("temp_uploads")
         temp_dir.mkdir(exist_ok=True)
-
-        try:
-            # Save uploaded files
-            pdf_paths = []
-            for pdf_file in pdf_files:
-                pdf_path = temp_dir / pdf_file.name
-                with open(pdf_path, "wb") as f:
-                    f.write(pdf_file.getbuffer())
-                pdf_paths.append(pdf_path)
-
-            protocol_path = temp_dir / protocol_file.name
-            with open(protocol_path, "wb") as f:
-                f.write(protocol_file.getbuffer())
-
-            # Create progress bar
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-
-            # Process files
-            status_text.text("Processing files...")
-            output_file = process_pdf_directory(str(temp_dir), str(protocol_path))
-
-            if output_file and os.path.exists(output_file):
-                progress_bar.progress(100)
-                status_text.text("Extraction completed successfully!")
-                
-                # Show success message and download button
-                st.success(f"✅ Extraction completed! File saved to: {output_file}")
-                
-                # Create download button
-                with open(output_file, "rb") as f:
-                    st.download_button(
-                        label="Download Excel File",
-                        data=f,
-                        file_name=os.path.basename(output_file),
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-            else:
-                st.error("Extraction failed - no output file was created")
-
-        except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
         
-        finally:
+        # Save uploaded files
+        for uploaded_file in uploaded_files:
+            with open(temp_dir / uploaded_file.name, "wb") as f:
+                f.write(uploaded_file.getvalue())
+        
+        if st.button("Process PDFs"):
+            with st.spinner("Processing PDFs..."):
+                # Process PDFs
+                results = process_pdf_directory(str(temp_dir))
+                
+                if results:
+                    # Convert results to DataFrame
+                    df = pd.DataFrame(results)
+                    
+                    # Process with AI
+                    st.subheader("AI Analysis")
+                    with st.spinner("Analyzing with AI..."):
+                        # Process each PDF with AI
+                        ai_results = []
+                        for _, row in df.iterrows():
+                            text = row['text'] if 'text' in row else ""
+                            if text:
+                                ai_data = st.session_state.ai_processor.process_text(text)
+                                ai_results.append(ai_data)
+                        
+                        # Analyze findings across all papers
+                        if ai_results:
+                            analysis = st.session_state.ai_processor.analyze_findings(ai_results)
+                            
+                            # Display analysis
+                            st.markdown("### Research Analysis")
+                            st.write(analysis['analysis'])
+                            
+                            # Create AI-enhanced DataFrame
+                            ai_df = pd.DataFrame(ai_results)
+                            
+                            # Save both DataFrames
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            excel_path = Path(output_dir) / f"pdf_extracts_ai_{timestamp}.xlsx"
+                            
+                            with pd.ExcelWriter(excel_path) as writer:
+                                df.to_excel(writer, sheet_name='Raw Data', index=False)
+                                ai_df.to_excel(writer, sheet_name='AI Analysis', index=False)
+                            
+                            st.success(f"Files processed successfully! Saved to: {excel_path}")
+                            
+                            # Display preview of AI analysis
+                            st.subheader("Preview of AI Analysis")
+                            st.dataframe(ai_df)
+                        else:
+                            st.error("No text content found in PDFs for AI analysis")
+                else:
+                    st.error("No results found from PDF processing")
+            
             # Clean up temporary files
-            for file in temp_dir.glob("*"):
+            for file in temp_dir.glob("*.pdf"):
                 file.unlink()
             temp_dir.rmdir()
+
+    # Add API key configuration
+    st.sidebar.title("Configuration")
+    api_key = st.sidebar.text_input("OpenAI API Key", type="password")
+    if api_key:
+        os.environ["OPENAI_API_KEY"] = api_key
+        st.sidebar.success("API key configured!")
+    else:
+        st.sidebar.warning("Please enter your OpenAI API key to enable AI features")
+
+    # Add information about the app
+    st.sidebar.markdown("""
+    ### About
+    This app uses AI to:
+    - Extract structured information from PDFs
+    - Analyze research findings
+    - Identify patterns and insights
+    - Generate comprehensive reports
+
+    ### Requirements
+    - OpenAI API key
+    - PDF files to analyze
+    """)
 
 if __name__ == "__main__":
     main() 
