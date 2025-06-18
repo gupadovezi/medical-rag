@@ -33,104 +33,209 @@ class AIProcessor:
     def __init__(self):
         """Initialize the AI processor with OpenRouter API"""
         self.api_key = os.getenv("OPENROUTER_API_KEY")
+        if not self.api_key:
+            raise ValueError("OPENROUTER_API_KEY environment variable is not set")
+            
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "HTTP-Referer": "https://github.com/gupadovezi/-pdf-extractor-app-",  # Required by OpenRouter
-            "X-Title": "PDF Extractor App",  # Optional, but good practice
+            "HTTP-Referer": "https://github.com/gupadovezi/-pdf-extractor-app-",
+            "X-Title": "PDF Extractor App",
             "Content-Type": "application/json"
         }
 
     def _call_openrouter_api(self, prompt: str) -> str:
-        """Call the OpenRouter API with a prompt"""
+        """Call OpenRouter API with the given prompt."""
         try:
             payload = {
-                "model": "meta-llama/llama-4-scout:free",  # Using Llama 4 Scout
+                "model": "meta-llama/llama-4-scout:free",
                 "messages": [
-                    {"role": "system", "content": "You are an expert research paper analyzer."},
+                    {"role": "system", "content": "You are a helpful AI assistant that extracts and analyzes information from research papers. Always respond with valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                "temperature": 0.1,
-                "max_tokens": 4000  # Llama 4 Scout has a large context window
+                "max_tokens": 4000,
+                "temperature": 0.1  # Lower temperature for more consistent JSON output
             }
             
-            response = requests.post(self.api_url, headers=self.headers, json=payload)
-            response.raise_for_status()
+            print(f"Sending request to OpenRouter API...")
+            print(f"API URL: {self.api_url}")
+            print(f"Headers: {json.dumps({k: v for k, v in self.headers.items() if k != 'Authorization'})}")
             
-            return response.json()["choices"][0]["message"]["content"]
+            response = requests.post(
+                self.api_url,
+                headers=self.headers,
+                json=payload
+            )
+            
+            print(f"Response status code: {response.status_code}")
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                if "choices" in response_data and len(response_data["choices"]) > 0:
+                    content = response_data["choices"][0]["message"]["content"]
+                    print(f"Raw API response: {content[:200]}...")  # Print first 200 chars of response
+                    return content
+                else:
+                    print(f"Unexpected API response format: {json.dumps(response_data)}")
+                    raise Exception(f"Unexpected API response format: {response_data}")
+            else:
+                error_msg = f"Error calling OpenRouter API: {response.status_code}"
+                try:
+                    error_details = response.json()
+                    error_msg += f" - {json.dumps(error_details)}"
+                except:
+                    error_msg += f" - {response.text}"
+                print(f"API error: {error_msg}")
+                raise Exception(error_msg)
+                
         except Exception as e:
-            print(f"Error calling OpenRouter API: {str(e)}")
-            return ""
+            print(f"API call error: {str(e)}")
+            raise Exception(f"Error calling OpenRouter API: {str(e)}")
 
     def process_text(self, text: str) -> Dict[str, Any]:
-        """Process text using AI to extract structured information"""
+        """Process text and extract structured information."""
         try:
-            # Create the prompt
-            prompt = f"""Extract key information from this research paper text and format it as JSON:
-            {text}
-            
-            Extract the following information:
-            - Title
-            - Authors (as a list)
-            - Year (as a number)
-            - Abstract
-            - Key findings (as a list)
-            - Methodology
-            - Keywords (as a list)
-            
-            Format the response as a valid JSON object with these exact keys."""
-            
-            # Get response from the model
-            response = self._call_openrouter_api(prompt)
-            
-            # Parse the response
-            try:
-                data = json.loads(response)
-                return ExtractedData(
-                    title=data.get("title", ""),
-                    authors=data.get("authors", []),
-                    year=data.get("year"),
-                    abstract=data.get("abstract", ""),
-                    key_findings=data.get("key_findings", []),
-                    methodology=data.get("methodology", ""),
-                    keywords=data.get("keywords", [])
-                ).dict()
-            except json.JSONDecodeError:
-                print("Error parsing JSON response")
-                return ExtractedData().dict()
-            
-        except Exception as e:
-            print(f"Error processing text with AI: {str(e)}")
-            return ExtractedData().dict()
+            if not text or len(text.strip()) == 0:
+                return {
+                    "error": "Empty text provided",
+                    "raw_text": ""
+                }
 
-    def analyze_findings(self, extracted_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Analyze multiple papers to find patterns and insights"""
+            print(f"Processing text of length: {len(text)}")
+            
+            prompt = f"""Extract information from this research paper text and return it as a JSON object with the following structure:
+            {{
+                "title": "paper title",
+                "authors": ["author names"],
+                "year": "publication year",
+                "journal": "journal name",
+                "abstract": "paper abstract",
+                "methods": "research methods used",
+                "findings": "key findings",
+                "conclusions": "main conclusions"
+            }}
+
+            Important: Return ONLY the JSON object, no other text or explanation. Do not include markdown formatting or code blocks.
+
+            Paper text:
+            {text[:4000]}
+            """
+            
+            response = self._call_openrouter_api(prompt)
+            print(f"Received response from API: {response[:200]}...")  # Print first 200 chars of response
+            
+            # Clean the response to ensure it's valid JSON
+            response = response.strip()
+            
+            # Remove any markdown code block formatting
+            if response.startswith("```json"):
+                response = response[7:]
+            elif response.startswith("```"):
+                response = response[3:]
+            if response.endswith("```"):
+                response = response[:-3]
+            response = response.strip()
+            
+            # Remove any leading/trailing quotes
+            response = response.strip('"\'')
+            
+            try:
+                # Try to parse the response as JSON
+                data = json.loads(response)
+                print(f"Successfully parsed JSON response")
+                
+                # Validate required fields
+                required_fields = ["title", "authors", "year", "journal", "abstract", "methods", "findings", "conclusions"]
+                for field in required_fields:
+                    if field not in data:
+                        print(f"Missing field: {field}")
+                        data[field] = ""
+                    elif isinstance(data[field], list) and not data[field]:
+                        data[field] = []
+                    elif isinstance(data[field], str) and not data[field]:
+                        data[field] = ""
+                
+                return data
+            except json.JSONDecodeError as e:
+                print(f"JSON parsing error: {str(e)}")
+                print(f"Raw response: {response}")
+                return {
+                    "error": f"Failed to parse AI response: {str(e)}",
+                    "raw_response": response
+                }
+                
+        except Exception as e:
+            print(f"Processing error: {str(e)}")
+            return {
+                "error": f"Error processing text: {str(e)}",
+                "raw_text": text[:200]
+            }
+
+    def analyze_findings(self, papers: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Analyze findings across multiple papers."""
         try:
-            # Create a summary prompt
-            papers_text = json.dumps(extracted_data, indent=2)
-            prompt = f"""Analyze these research papers and provide:
-            1. Common themes
-            2. Conflicting findings
-            3. Research gaps
-            4. Future research directions
+            # Filter out papers with errors
+            valid_papers = [p for p in papers if "error" not in p]
             
-            Papers data:
-            {papers_text}
+            if not valid_papers:
+                return {
+                    "analysis": "No valid papers to analyze",
+                    "papers_analyzed": 0
+                }
             
-            Be objective and data-driven in your analysis."""
+            # Create a summary of the papers
+            papers_summary = "\n\n".join([
+                f"Paper {i+1}:\nTitle: {p.get('title', 'N/A')}\nFindings: {p.get('findings', 'N/A')}"
+                for i, p in enumerate(valid_papers)
+            ])
             
-            # Get analysis from the model
+            prompt = f"""Analyze these research papers and provide insights in JSON format:
+            {{
+                "common_themes": ["list of common themes"],
+                "key_findings": ["list of key findings"],
+                "research_gaps": ["list of research gaps"],
+                "future_directions": ["list of future research directions"]
+            }}
+
+            Papers to analyze:
+            {papers_summary}
+            
+            Important: Return ONLY the JSON object, no other text or explanation. Do not include markdown formatting or code blocks.
+            """
+            
             analysis = self._call_openrouter_api(prompt)
             
-            return {
-                "analysis": analysis,
-                "papers_analyzed": len(extracted_data)
-            }
+            # Clean and parse the analysis response
+            analysis = analysis.strip()
+            
+            # Remove any markdown code block formatting
+            if analysis.startswith("```json"):
+                analysis = analysis[7:]
+            elif analysis.startswith("```"):
+                analysis = analysis[3:]
+            if analysis.endswith("```"):
+                analysis = analysis[:-3]
+            analysis = analysis.strip()
+            
+            # Remove any leading/trailing quotes
+            analysis = analysis.strip('"\'')
+            
+            try:
+                analysis_data = json.loads(analysis)
+                return {
+                    "analysis": analysis_data,
+                    "papers_analyzed": len(valid_papers)
+                }
+            except json.JSONDecodeError:
+                return {
+                    "analysis": "Failed to parse analysis response",
+                    "raw_analysis": analysis,
+                    "papers_analyzed": len(valid_papers)
+                }
             
         except Exception as e:
-            print(f"Error analyzing findings: {str(e)}")
+            print(f"Analysis error: {str(e)}")
             return {
-                "error": str(e),
-                "analysis": "",
+                "analysis": f"Error analyzing findings: {str(e)}",
                 "papers_analyzed": 0
             } 
