@@ -14,7 +14,25 @@ This application helps you extract and analyze information from PDF files using 
 
 The app is deployed at: [Your Streamlit Cloud URL will appear here]
 
-## Local Development
+## Deployment
+
+### Deploying to Streamlit Cloud
+
+1. Fork this repository to your GitHub account
+2. Go to [share.streamlit.io](https://share.streamlit.io/)
+3. Sign in with your GitHub account
+4. Click "New app"
+5. Select your forked repository
+6. Configure the app:
+   - Main file path: `src/agent/pdf_extractor_streamlit.py`
+   - Python version: 3.8 or higher
+7. Add your OpenRouter API key in the "Advanced settings":
+   - Click "Add secret"
+   - Key: `OPENROUTER_API_KEY`
+   - Value: Your OpenRouter API key
+8. Click "Deploy"
+
+### Local Development
 
 1. Clone the repository:
 ```bash
@@ -27,7 +45,12 @@ cd pdf-extractor-app
 pip install -r requirements.txt
 ```
 
-3. Run the app:
+3. Create a `.streamlit/secrets.toml` file:
+```toml
+OPENROUTER_API_KEY = "your-api-key-here"
+```
+
+4. Run the app:
 ```bash
 streamlit run src/agent/pdf_extractor_streamlit.py
 ```
@@ -35,12 +58,15 @@ streamlit run src/agent/pdf_extractor_streamlit.py
 ## Configuration
 
 1. Get an OpenRouter API key from https://openrouter.ai/keys
-2. Enter the API key in the app's sidebar
+2. For local development: Add the API key to `.streamlit/secrets.toml`
+3. For Streamlit Cloud: Add the API key in the app's secrets section
 
 ## Project Structure
 
 ```
 pdf-extractor-app/
+├── .streamlit/
+│   └── secrets.toml
 ├── src/
 │   └── agent/
 │       ├── pdf_extractor_streamlit.py
