@@ -26,18 +26,18 @@ def main():
     # Add API key configuration
     st.sidebar.title("Configuration")
     api_key = st.sidebar.text_input(
-        "OpenAI API Key",
+        "OpenRouter API Key",
         value="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",
         type="password"
     )
 
     if api_key:
-        os.environ["OPENAI_API_KEY"] = api_key
+        os.environ["OPENROUTER_API_KEY"] = api_key
         if st.session_state.ai_processor is None:
             st.session_state.ai_processor = AIProcessor()
         st.sidebar.success("API key configured!")
     else:
-        st.sidebar.warning("Please enter your OpenAI API key to enable AI features")
+        st.sidebar.warning("Please enter your OpenRouter API key to enable AI features")
 
     # File uploader
     uploaded_files = st.file_uploader("Upload PDF files", type=['pdf'], accept_multiple_files=True)
@@ -129,7 +129,7 @@ def main():
     - Generate comprehensive reports
 
     ### Requirements
-    - OpenAI API key
+    - OpenRouter API key
     - PDF files to analyze
     """)
 

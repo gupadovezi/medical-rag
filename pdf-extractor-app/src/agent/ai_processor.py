@@ -1,100 +1,129 @@
 import os
 from typing import List, Dict, Any
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+import requests
 import json
 
 # Load environment variables
 load_dotenv()
 
-class ExtractedData(BaseModel):
+class ExtractedData:
     """Schema for extracted data from PDFs"""
-    title: str = Field(description="Title of the paper")
-    authors: List[str] = Field(description="List of authors")
-    year: int = Field(description="Publication year")
-    abstract: str = Field(description="Abstract of the paper")
-    key_findings: List[str] = Field(description="Key findings or conclusions")
-    methodology: str = Field(description="Research methodology used")
-    keywords: List[str] = Field(description="Keywords or topics")
+    def __init__(self, title="", authors=None, year=None, abstract="", key_findings=None, methodology="", keywords=None):
+        self.title = title
+        self.authors = authors or []
+        self.year = year
+        self.abstract = abstract
+        self.key_findings = key_findings or []
+        self.methodology = methodology
+        self.keywords = keywords or []
+
+    def dict(self):
+        return {
+            "title": self.title,
+            "authors": self.authors,
+            "year": self.year,
+            "abstract": self.abstract,
+            "key_findings": self.key_findings,
+            "methodology": self.methodology,
+            "keywords": self.keywords
+        }
 
 class AIProcessor:
     def __init__(self):
-        """Initialize the AI processor with OpenAI model"""
-        self.llm = ChatOpenAI(
-            model="gpt-3.5-turbo",
-            temperature=0,
-            api_key=os.getenv("OPENAI_API_KEY")
-        )
-        self.parser = PydanticOutputParser(pydantic_object=ExtractedData)
-        
-        # Create the prompt template
-        self.prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an expert research paper analyzer. 
-            Extract key information from the provided text following this format:
-            {format_instructions}
+        """Initialize the AI processor with OpenRouter API"""
+        self.api_key = os.getenv("OPENROUTER_API_KEY")
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://github.com/gupadovezi/-pdf-extractor-app-",  # Required by OpenRouter
+            "X-Title": "PDF Extractor App",  # Optional, but good practice
+            "Content-Type": "application/json"
+        }
+
+    def _call_openrouter_api(self, prompt: str) -> str:
+        """Call the OpenRouter API with a prompt"""
+        try:
+            payload = {
+                "model": "meta-llama/llama-4-scout:free",  # Using Llama 4 Scout
+                "messages": [
+                    {"role": "system", "content": "You are an expert research paper analyzer."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1,
+                "max_tokens": 4000  # Llama 4 Scout has a large context window
+            }
             
-            Focus on extracting accurate information and maintain objectivity."""),
-            ("user", "{text}")
-        ])
+            response = requests.post(self.api_url, headers=self.headers, json=payload)
+            response.raise_for_status()
+            
+            return response.json()["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"Error calling OpenRouter API: {str(e)}")
+            return ""
 
     def process_text(self, text: str) -> Dict[str, Any]:
         """Process text using AI to extract structured information"""
         try:
-            # Format the prompt with instructions and text
-            formatted_prompt = self.prompt.format_messages(
-                format_instructions=self.parser.get_format_instructions(),
-                text=text
-            )
+            # Create the prompt
+            prompt = f"""Extract key information from this research paper text and format it as JSON:
+            {text}
+            
+            Extract the following information:
+            - Title
+            - Authors (as a list)
+            - Year (as a number)
+            - Abstract
+            - Key findings (as a list)
+            - Methodology
+            - Keywords (as a list)
+            
+            Format the response as a valid JSON object with these exact keys."""
             
             # Get response from the model
-            response = self.llm.invoke(formatted_prompt)
+            response = self._call_openrouter_api(prompt)
             
             # Parse the response
-            parsed_data = self.parser.parse(response.content)
-            
-            return parsed_data.dict()
+            try:
+                data = json.loads(response)
+                return ExtractedData(
+                    title=data.get("title", ""),
+                    authors=data.get("authors", []),
+                    year=data.get("year"),
+                    abstract=data.get("abstract", ""),
+                    key_findings=data.get("key_findings", []),
+                    methodology=data.get("methodology", ""),
+                    keywords=data.get("keywords", [])
+                ).dict()
+            except json.JSONDecodeError:
+                print("Error parsing JSON response")
+                return ExtractedData().dict()
             
         except Exception as e:
             print(f"Error processing text with AI: {str(e)}")
-            return {
-                "error": str(e),
-                "title": "",
-                "authors": [],
-                "year": None,
-                "abstract": "",
-                "key_findings": [],
-                "methodology": "",
-                "keywords": []
-            }
+            return ExtractedData().dict()
 
     def analyze_findings(self, extracted_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Analyze multiple papers to find patterns and insights"""
         try:
             # Create a summary prompt
-            summary_prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are an expert research analyst. 
-                Analyze the following research papers and provide:
-                1. Common themes
-                2. Conflicting findings
-                3. Research gaps
-                4. Future research directions
-                
-                Be objective and data-driven in your analysis."""),
-                ("user", "{papers}")
-            ])
-            
-            # Format papers data
             papers_text = json.dumps(extracted_data, indent=2)
+            prompt = f"""Analyze these research papers and provide:
+            1. Common themes
+            2. Conflicting findings
+            3. Research gaps
+            4. Future research directions
+            
+            Papers data:
+            {papers_text}
+            
+            Be objective and data-driven in your analysis."""
             
             # Get analysis from the model
-            formatted_prompt = summary_prompt.format_messages(papers=papers_text)
-            response = self.llm.invoke(formatted_prompt)
+            analysis = self._call_openrouter_api(prompt)
             
             return {
-                "analysis": response.content,
+                "analysis": analysis,
                 "papers_analyzed": len(extracted_data)
             }
             
