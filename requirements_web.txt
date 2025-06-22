@@ -5,6 +5,4 @@ langchain-openai
 chromadb
 sentence-transformers
 biopython
-requests
-torch
-transformers
+requests 
